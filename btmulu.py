@@ -182,7 +182,7 @@ class btmulu(object):
 		parser.print_worker.start()
 		parser.print_queue.join()
 		page_number = 1
-		torrent_count = 1
+		torrent_count = 0
 		while True:
 			search_url = f"{self.url}/search/page-{page_number}.html?name={what}"
 			try:
