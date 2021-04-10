@@ -5,10 +5,10 @@
 from helpers import retrieve_url
 from html.parser import HTMLParser
 from novaprinter import prettyPrinter
-import queue
-import threading
+from queue import Queue
+from threading import Thread
 
-class PrettyWorker(threading.Thread):
+class PrettyWorker(Thread):
 
 	def __init__(self, queue):
 		super().__init__()
@@ -18,7 +18,7 @@ class PrettyWorker(threading.Thread):
 		while True:
 			try:
 				prettyPrinter(self.queue.get(timeout=3))
-			except queue.Empty:
+			except:
 				return
 			self.queue.task_done()
 
@@ -26,7 +26,7 @@ class btmulu(object):
 
 	name = "BTmulu"
 	url = "https://www.btmulu.com"
-	supported_categories = {"all": "0"}
+	supported_categories = {"all": ""}
 
 	class BTmuluParser(HTMLParser):
 
@@ -59,8 +59,7 @@ class btmulu(object):
 			self.parse_torrent_size = False
 			self.parse_total_results = False
 			self.skip_torrent_extension = False
-
-			self.print_queue = queue.Queue()
+			self.print_queue = Queue()
 			self.print_worker = PrettyWorker(self.print_queue)
 
 		def handle_starttag(self, tag, attrs):
@@ -89,11 +88,12 @@ class btmulu(object):
 				if tag == "a":
 					attributes = dict(attrs)
 					if "href" in attributes:
-						if attributes["href"].find("hash") != -1:
+						if attributes["href"].find("hash/") != -1:
 							torrent_link = attributes["href"].strip()
 							self.torrent_info["desc_link"] = f"{self.engine_url}{torrent_link}"
-							magnet_id = torrent_link.split("hash/")[1].split(".html")[0].strip()
-							self.torrent_info["link"] = f"magnet:?xt=urn:btih:{magnet_id}"
+							if attributes["href"].find(".html") != -1:
+								magnet_id = torrent_link.split("hash/")[1].split(".html")[0].strip()
+								self.torrent_info["link"] = f"magnet:?xt=urn:btih:{magnet_id}"
 							self.find_torrent_link = False
 							self.find_torrent_info = True
 			elif self.find_torrent_info:
@@ -130,17 +130,16 @@ class btmulu(object):
 				self.parse_torrent_name = False
 				self.find_torrent_size = True
 			elif self.parse_torrent_size:
-				if data.find("Size") != -1:
+				if data.find("Size：") != -1:
 					if data.find("Created") != -1:
 						size, unit = data.split("Size：")[1].split("Created")[0].split(" ")
-				elif data.find("ファイルサイズ") != -1:
+				elif data.find("ファイルサイズ：") != -1:
 					if data.find("創建時期") != -1:
 						size, unit = data.split("ファイルサイズ：")[1].split("創建時期")[0].split(" ")
-				elif data.find("文件大小") != -1:
+				elif data.find("文件大小：") != -1:
 					if data.find("创建时间") != -1:
 						size, unit = data.split("文件大小：")[1].split("创建时间")[0].split(" ")
-				elif data.find("文件大小") != -1:
-					if data.find("創建時間") != -1:
+					elif data.find("創建時間") != -1:
 						size, unit = data.split("文件大小：")[1].split("創建時間")[0].split(" ")
 				if isinstance(size, str) and isinstance(unit, str):
 					size = size.strip()
@@ -177,7 +176,7 @@ class btmulu(object):
 				self.skip_torrent_extension = False
 				self.parse_torrent_name = True
 
-	def search(self, what="ubuntu", cat="all"):
+	def search(self, what, cat="all"):
 		parser = self.BTmuluParser(self.url)
 		parser.print_worker.start()
 		parser.print_queue.join()
