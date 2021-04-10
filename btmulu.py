@@ -150,7 +150,7 @@ class btmulu(object):
 					elif unit == "MB":
 						size = str(float(size)*1024*1024)
 					elif unit == "KB":
-						size = str(float(size)*1024*1024)
+						size = str(float(size)*1024)
 					else:
 						size = -1
 				else:
