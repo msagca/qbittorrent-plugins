@@ -1,4 +1,4 @@
-#VERSION: 1.0
+#VERSION: 1.1
 #AUTHOR: msagca
 # -*- coding: utf-8 -*-
 
@@ -33,7 +33,6 @@ class btmulu(object):
 		def __init__(self, url):
 			super().__init__()
 			self.engine_url = url
-			self.results_per_page = 20
 			self.torrent_info = {
 				"link": -1,
 				"name": -1,
@@ -43,8 +42,10 @@ class btmulu(object):
 				"engine_url": self.engine_url,
 				"desc_link": -1
 			}
+			self.results_per_page = 20
 			self.total_results = 0
-			self.print_result = False
+			self.print_queue = Queue()
+			self.print_worker = PrettyWorker(self.print_queue)
 			self.find_results_per_page = False
 			self.find_summary = True
 			self.find_torrent = False
@@ -58,9 +59,8 @@ class btmulu(object):
 			self.parse_torrent_name = False
 			self.parse_torrent_size = False
 			self.parse_total_results = False
+			self.print_result = False
 			self.skip_torrent_extension = False
-			self.print_queue = Queue()
-			self.print_worker = PrettyWorker(self.print_queue)
 
 		def handle_starttag(self, tag, attrs):
 			if self.find_summary:
@@ -88,12 +88,11 @@ class btmulu(object):
 				if tag == "a":
 					attributes = dict(attrs)
 					if "href" in attributes:
-						if attributes["href"].find("hash/") != -1:
-							torrent_link = attributes["href"].strip()
+						if attributes["href"].startswith("/hash") and attributes["href"].endswith(".html"):
+							torrent_link = attributes["href"]
 							self.torrent_info["desc_link"] = f"{self.engine_url}{torrent_link}"
-							if attributes["href"].find(".html") != -1:
-								magnet_id = torrent_link.split("hash/")[1].split(".html")[0].strip()
-								self.torrent_info["link"] = f"magnet:?xt=urn:btih:{magnet_id}"
+							magnet_id = torrent_link.split("hash/")[1].split(".html")[0]
+							self.torrent_info["link"] = f"magnet:?xt=urn:btih:{magnet_id}"
 							self.find_torrent_link = False
 							self.find_torrent_info = True
 			elif self.find_torrent_info:
@@ -104,7 +103,7 @@ class btmulu(object):
 				if tag == "span":
 					attributes = dict(attrs)
 					if "class" in attributes:
-						if attributes["class"].find("label") != -1:
+						if attributes["class"].startswith("label"):
 							self.find_torrent_extension = False
 							self.skip_torrent_extension = True
 			elif self.find_torrent_size:
@@ -115,14 +114,12 @@ class btmulu(object):
 		def handle_data(self, data):
 			if self.parse_results_per_page:
 				results_per_page = data.split("-")[1].strip()
-				if results_per_page.isnumeric():
-					self.results_per_page = int(results_per_page)
+				self.results_per_page = int(results_per_page)
 				self.parse_results_per_page = False
 				self.find_total_results = True
 			elif self.parse_total_results:
-				total_results = data.replace(",", "").strip()
-				if total_results.isnumeric():
-					self.total_results = int(total_results)
+				total_results = "".join(c for c in data if c.isdigit())
+				self.total_results = int(total_results)
 				self.parse_total_results = False
 				self.find_torrent = True
 			elif self.parse_torrent_name:
@@ -130,28 +127,25 @@ class btmulu(object):
 				self.parse_torrent_name = False
 				self.find_torrent_size = True
 			elif self.parse_torrent_size:
-				if data.find("Size：") != -1:
-					if data.find("Created") != -1:
-						size, unit = data.split("Size：")[1].split("Created")[0].split(" ")
-				elif data.find("ファイルサイズ：") != -1:
-					if data.find("創建時期") != -1:
-						size, unit = data.split("ファイルサイズ：")[1].split("創建時期")[0].split(" ")
-				elif data.find("文件大小：") != -1:
-					if data.find("创建时间") != -1:
-						size, unit = data.split("文件大小：")[1].split("创建时间")[0].split(" ")
-					elif data.find("創建時間") != -1:
-						size, unit = data.split("文件大小：")[1].split("創建時間")[0].split(" ")
-				if isinstance(size, str) and isinstance(unit, str):
-					size = size.strip()
-					unit = unit.strip()
-					if unit == "GB":
-						size = str(float(size)*1024*1024*1024)
-					elif unit == "MB":
-						size = str(float(size)*1024*1024)
-					elif unit == "KB":
-						size = str(float(size)*1024)
-					else:
-						size = -1
+				try:
+					size, unit = [x.strip() for x in data.split("Size：")[1].split("Created")[0].split(" ")]
+				except:
+					try:
+						size, unit = [x.strip() for x in data.split("ファイルサイズ：")[1].split("創建時期")[0].split(" ")]
+					except:
+						try:
+							size, unit = [x.strip() for x in data.split("文件大小：")[1].split("创建时间")[0].split(" ")]
+						except:
+							try:
+								size, unit = [x.strip() for x in data.split("文件大小：")[1].split("創建時間")[0].split(" ")]
+							except:
+								size = -1
+				if unit == "GB":
+					size = str(float(size)*1024*1024*1024)
+				elif unit == "MB":
+					size = str(float(size)*1024*1024)
+				elif unit == "KB":
+					size = str(float(size)*1024)
 				else:
 					size = -1
 				self.torrent_info["size"] = size
@@ -176,7 +170,7 @@ class btmulu(object):
 				self.skip_torrent_extension = False
 				self.parse_torrent_name = True
 
-	def search(self, what, cat="all"):
+	def search(self, what, cat):
 		parser = self.BTmuluParser(self.url)
 		parser.print_worker.start()
 		parser.print_queue.join()
