@@ -1,4 +1,4 @@
-#VERSION: 1.1
+#VERSION: 1.2
 #AUTHOR: msagca
 # -*- coding: utf-8 -*-
 
@@ -34,33 +34,32 @@ class btmulu(object):
 			super().__init__()
 			self.engine_url = url
 			self.torrent_info = {
-				"link": -1,
-				"name": -1,
-				"size": -1,
-				"seeds": -1,
-				"leech": -1,
+				"link": "",
+				"name": "",
+				"size": "-1",
+				"seeds": "-1",
+				"leech": "-1",
 				"engine_url": self.engine_url,
-				"desc_link": -1
+				"desc_link": ""
 			}
 			self.results_per_page = 20
 			self.total_results = 0
 			self.print_queue = Queue()
 			self.print_worker = PrettyWorker(self.print_queue)
-			self.find_results_per_page = False
 			self.find_summary = True
-			self.find_torrent = False
-			self.find_torrent_extension = False
-			self.find_torrent_info = False
-			self.find_torrent_link = False
-			self.find_torrent_name = False
-			self.find_torrent_size = False
+			self.find_results_per_page = False
 			self.find_total_results = False
+			self.find_torrent = False
+			self.find_link = False
+			self.find_info = False
+			self.find_extension = False
+			self.find_size = False
 			self.parse_results_per_page = False
-			self.parse_torrent_name = False
-			self.parse_torrent_size = False
 			self.parse_total_results = False
+			self.parse_name = False
+			self.parse_size = False
 			self.print_result = False
-			self.skip_torrent_extension = False
+			self.skip_extension = False
 
 		def handle_starttag(self, tag, attrs):
 			if self.find_summary:
@@ -83,33 +82,33 @@ class btmulu(object):
 					attributes = dict(attrs)
 					if "data-key" in attributes:
 						self.find_torrent = False
-						self.find_torrent_link = True
-			elif self.find_torrent_link:
+						self.find_link = True
+			elif self.find_link:
 				if tag == "a":
 					attributes = dict(attrs)
 					if "href" in attributes:
-						if attributes["href"].startswith("/hash") and attributes["href"].endswith(".html"):
+						if attributes["href"].startswith("/hash"):
 							torrent_link = attributes["href"]
 							self.torrent_info["desc_link"] = f"{self.engine_url}{torrent_link}"
 							magnet_id = torrent_link.split("hash/")[1].split(".html")[0]
 							self.torrent_info["link"] = f"magnet:?xt=urn:btih:{magnet_id}"
-							self.find_torrent_link = False
-							self.find_torrent_info = True
-			elif self.find_torrent_info:
+							self.find_link = False
+							self.find_info = True
+			elif self.find_info:
 				if tag == "h4":
-					self.find_torrent_info = False
-					self.find_torrent_extension = True
-			elif self.find_torrent_extension:
+					self.find_info = False
+					self.find_extension = True
+			elif self.find_extension:
 				if tag == "span":
 					attributes = dict(attrs)
 					if "class" in attributes:
 						if attributes["class"].startswith("label"):
-							self.find_torrent_extension = False
-							self.skip_torrent_extension = True
-			elif self.find_torrent_size:
+							self.find_extension = False
+							self.skip_extension = True
+			elif self.find_size:
 				if tag == "p":
-					self.find_torrent_size = False
-					self.parse_torrent_size = True
+					self.find_size = False
+					self.parse_size = True
 
 		def handle_data(self, data):
 			if self.parse_results_per_page:
@@ -122,11 +121,11 @@ class btmulu(object):
 				self.total_results = int(total_results)
 				self.parse_total_results = False
 				self.find_torrent = True
-			elif self.parse_torrent_name:
+			elif self.parse_name:
 				self.torrent_info["name"] = data.strip()
-				self.parse_torrent_name = False
-				self.find_torrent_size = True
-			elif self.parse_torrent_size:
+				self.parse_name = False
+				self.find_size = True
+			elif self.parse_size:
 				try:
 					size, unit = [x.strip() for x in data.split("Size：")[1].split("Created")[0].split(" ")]
 				except:
@@ -139,38 +138,30 @@ class btmulu(object):
 							try:
 								size, unit = [x.strip() for x in data.split("文件大小：")[1].split("創建時間")[0].split(" ")]
 							except:
-								size = -1
-				if unit == "GB":
-					size = str(float(size)*1024*1024*1024)
-				elif unit == "MB":
-					size = str(float(size)*1024*1024)
-				elif unit == "KB":
-					size = str(float(size)*1024)
-				else:
-					size = -1
-				self.torrent_info["size"] = size
-				self.parse_torrent_size = False
+								size, unit = "-1", ""
+				self.torrent_info["size"] = size + unit
+				self.parse_size = False
 				self.print_result = True
 
 		def handle_endtag(self, tag):
 			if self.print_result:
 				self.print_queue.put(self.torrent_info)
 				self.torrent_info = {
-					"link": -1,
-					"name": -1,
-					"size": -1,
-					"seeds": -1,
-					"leech": -1,
+					"link": "",
+					"name": "",
+					"size": "-1",
+					"seeds": "-1",
+					"leech": "-1",
 					"engine_url": self.engine_url,
-					"desc_link": -1
+					"desc_link": ""
 				}
 				self.print_result = False
 				self.find_torrent = True
-			elif self.skip_torrent_extension:
-				self.skip_torrent_extension = False
-				self.parse_torrent_name = True
+			elif self.skip_extension:
+				self.skip_extension = False
+				self.parse_name = True
 
-	def search(self, what, cat):
+	def search(self, what, cat="all"):
 		parser = self.BTmuluParser(self.url)
 		parser.print_worker.start()
 		parser.print_queue.join()
@@ -183,16 +174,15 @@ class btmulu(object):
 				parser.feed(retrieved_page)
 			except:
 				break
+			torrent_count += 20
 			if torrent_count < parser.total_results:
-				#torrent_count += parser.results_per_page
-				torrent_count += 20
 				page_number += 1
 				if page_number > 50:
 					break
 			else:
 				break
-		"""
-		while not parser.print_queue.empty():
-			prettyPrinter(parser.print_queue.get())
-		"""
 		parser.close()
+
+if __name__ == "__main__":
+	engine = btmulu()
+	engine.search("ubuntu", "all")
