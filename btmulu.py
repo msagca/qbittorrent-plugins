@@ -24,7 +24,7 @@ class PrettyWorker(Thread):
 			self.queue.task_done()
 
 
-class btmulu(object):
+class btmulu:
 
 	name = 'BTmulu'
 	url = 'https://www.btmulu.com'

@@ -24,7 +24,7 @@ class PrettyWorker(Thread):
 			self.queue.task_done()
 
 
-class uniondht(object):
+class uniondht:
 
 	name = 'UnionDHT'
 	url = 'http://uniondht.org'
